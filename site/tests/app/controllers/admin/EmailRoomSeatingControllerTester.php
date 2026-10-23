@@ -14,6 +14,8 @@ use app\libraries\response\RedirectResponse;
 use app\libraries\Utils;
 use app\models\Config;
 use app\models\Email;
+use app\models\Notification;
+use app\models\User;
 use app\views\admin\EmailRoomSeatingView;
 
 class EmailRoomSeatingControllerTester extends \PHPUnit\Framework\TestCase {
@@ -47,8 +49,34 @@ class EmailRoomSeatingControllerTester extends \PHPUnit\Framework\TestCase {
         $config->setCourse('csci1100');
         $config->setRoomSeatingGradeableId('test');
         $core->setConfig($config);
+        $core->setUser(new User($core, [
+            'user_id' => 'instructor_1',
+            'user_givenname' => 'Instructor',
+            'user_familyname' => 'One',
+            'user_email' => null,
+            'user_group' => User::GROUP_INSTRUCTOR
+        ]));
         /** @var NotificationFactory&\PHPUnit\Framework\MockObject\MockObject $factory */
         $factory = $this->createMock(NotificationFactory::class);
+        $factory->expects($this->once())
+            ->method('sendNotifications')
+            ->with($this->callback(function (array $notifications) use ($core): bool {
+                $this->assertCount(3, $notifications);
+                $this->assertSame(['user_1', 'user_3', 'user_4'], array_map(
+                    static fn(Notification $notification): string => $notification->getNotifyTarget(),
+                    $notifications
+                ));
+                foreach ($notifications as $notification) {
+                    $this->assertSame('student', $notification->getComponent());
+                    $this->assertSame('Seating Assignment for test', $notification->getNotifyContent());
+                    $this->assertSame('instructor_1', $notification->getNotifySource());
+                    $this->assertSame(
+                        ['url' => $core->buildCourseUrl()],
+                        json_decode($notification->getNotifyMetadata(), true)
+                    );
+                }
+                return true;
+            }));
         $factory->expects($this->once())->method('sendEmails')->with($this->equalTo([
             new Email($core, [
                 "subject" => "Seating Assignment for test",
@@ -146,8 +174,31 @@ Please email your instructor with any questions or concerns.',
         $config->setCourse('csci1100');
         $config->setRoomSeatingGradeableId('test');
         $core->setConfig($config);
+        $core->setUser(new User($core, [
+            'user_id' => 'instructor_1',
+            'user_givenname' => 'Instructor',
+            'user_familyname' => 'One',
+            'user_email' => null,
+            'user_group' => User::GROUP_INSTRUCTOR
+        ]));
         /** @var NotificationFactory&\PHPUnit\Framework\MockObject\MockObject $factory */
         $factory = $this->createMock(NotificationFactory::class);
+        $factory->expects($this->once())
+            ->method('sendNotifications')
+            ->with($this->callback(function (array $notifications) use ($core): bool {
+                $this->assertCount(2, $notifications);
+                $this->assertSame(['user_1', 'user_3'], array_map(
+                    static fn(Notification $notification): string => $notification->getNotifyTarget(),
+                    $notifications
+                ));
+                foreach ($notifications as $notification) {
+                    $this->assertSame(
+                        ['url' => $core->buildCourseUrl()],
+                        json_decode($notification->getNotifyMetadata(), true)
+                    );
+                }
+                return true;
+            }));
         $factory->expects($this->once())->method('sendEmails')->with($this->equalTo([
             new Email($core, [
                 "subject" => "Seating Assignment for SEE INSTRUCTOR",
